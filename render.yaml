@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ship-tracking-dashboard
+    env: python
+    plan: pro
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATA_MODE
+        value: API
+      - key: DEFAULT_AREA
+        value: TOKYO_BAY
+      - key: REFRESH_SECONDS
+        value: "30"
+      - key: MAX_RECORDS
+        value: "500"
+      - key: AIS_PROVIDER
+        value: AISSTREAM
+      - key: LOG_LEVEL
+        value: INFO
+      - key: TZ
+        value: Asia/Tokyo
+      - key: AISSTREAM_API_KEY
+        sync: false
