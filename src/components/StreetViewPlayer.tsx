@@ -57,8 +57,8 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
 
     // Touch devices fire neither `wheel` (no mouse) nor `keydown` (no physical keys), so a vertical
     // drag - the mobile equivalent of scrolling - is tracked separately via Pointer Events, which also
-    // covers mouse-drag as a bonus. Dragging the finger up (deltaY negative) reads as "scroll down /
-    // advance", matching how dragging up on a normal page reveals content further down.
+    // covers mouse-drag as a bonus. Dragging the finger down (deltaY positive) advances, matching how
+    // dragging down on a normal page reveals content further down.
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType === 'mouse' && event.button !== 0) {
         return;
@@ -76,7 +76,7 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
 
       const deltaY = event.clientY - active.lastY;
       active.lastY = event.clientY;
-      touchAccumulatorRef.current -= deltaY;
+      touchAccumulatorRef.current += deltaY;
 
       const threshold = 40;
       if (Math.abs(touchAccumulatorRef.current) < threshold) {
