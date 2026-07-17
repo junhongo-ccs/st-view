@@ -30,7 +30,7 @@ export function RouteSearch({ routeMeta, disabled, onSubmit }: RouteSearchProps)
         type="button"
         aria-label="ルート検索を開く"
         onClick={() => setMobileOpen(true)}
-        className="fixed bottom-[max(24px,env(safe-area-inset-bottom))] right-20 z-40 grid h-12 w-12 place-items-center rounded-full border border-white/45 bg-black/25 text-white shadow-float backdrop-blur-md transition hover:bg-black/35 focus:outline-none focus:ring-2 focus:ring-brand md:hidden"
+        className="fixed bottom-[max(24px,env(safe-area-inset-bottom))] right-5 z-40 grid h-12 w-12 place-items-center rounded-full border border-white/45 bg-black/25 text-white shadow-float backdrop-blur-md transition hover:bg-black/35 focus:outline-none focus:ring-2 focus:ring-brand md:hidden"
       >
         <Menu className="h-5 w-5" strokeWidth={1.8} />
       </button>
