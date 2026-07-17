@@ -15,6 +15,8 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
   const [placeLabel, setPlaceLabel] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement));
   const wheelAccumulatorRef = useRef(0);
+  const touchAccumulatorRef = useRef(0);
+  const activePointerRef = useRef<{ id: number; lastY: number } | null>(null);
   const geocodeCacheRef = useRef(new Map<string, string>());
   const geocodeRequestRef = useRef(0);
 
@@ -53,6 +55,46 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
       moveFrames(steps);
     };
 
+    // Touch devices fire neither `wheel` (no mouse) nor `keydown` (no physical keys), so a vertical
+    // drag - the mobile equivalent of scrolling - is tracked separately via Pointer Events, which also
+    // covers mouse-drag as a bonus. Dragging the finger up (deltaY negative) reads as "scroll down /
+    // advance", matching how dragging up on a normal page reveals content further down.
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) {
+        return;
+      }
+      activePointerRef.current = { id: event.pointerId, lastY: event.clientY };
+      touchAccumulatorRef.current = 0;
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const active = activePointerRef.current;
+      if (!active || active.id !== event.pointerId) {
+        return;
+      }
+      event.preventDefault();
+
+      const deltaY = event.clientY - active.lastY;
+      active.lastY = event.clientY;
+      touchAccumulatorRef.current -= deltaY;
+
+      const threshold = 40;
+      if (Math.abs(touchAccumulatorRef.current) < threshold) {
+        return;
+      }
+
+      const steps = Math.trunc(touchAccumulatorRef.current / threshold);
+      touchAccumulatorRef.current -= steps * threshold;
+      moveFrames(steps);
+    };
+
+    const endDrag = (event: PointerEvent) => {
+      if (activePointerRef.current?.id === event.pointerId) {
+        activePointerRef.current = null;
+        touchAccumulatorRef.current = 0;
+      }
+    };
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'ArrowUp' || event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
         event.preventDefault();
@@ -78,10 +120,20 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
     window.scrollTo({ top: 0 });
     window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
     return () => {
       wheelAccumulatorRef.current = 0;
+      touchAccumulatorRef.current = 0;
+      activePointerRef.current = null;
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', endDrag);
+      window.removeEventListener('pointercancel', endDrag);
     };
   }, [imageUrls, playing]);
 
@@ -155,7 +207,7 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
 
   return (
     <>
-      <div className="fixed inset-0 h-dvh w-screen overflow-hidden bg-slate-950">
+      <div className={`fixed inset-0 h-dvh w-screen overflow-hidden bg-slate-950 ${playing ? 'touch-none' : ''}`}>
         {layerUrls.map((url, index) => (
           <img
             key={`${index}-${url}`}
