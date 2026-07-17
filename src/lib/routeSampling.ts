@@ -49,10 +49,34 @@ function nearestPointOnSegment(point: LatLng, a: LatLng, b: LatLng): { point: La
   return { point: projected, distance: distanceMeters(point, projected) };
 }
 
+function nearestPointOnPolyline(point: LatLng, polyline: LatLng[]): LatLng | null {
+  if (polyline.length === 0) {
+    return null;
+  }
+  if (polyline.length === 1) {
+    return polyline[0];
+  }
+
+  let nearest: { point: LatLng; distance: number } | null = null;
+  for (let index = 1; index < polyline.length; index += 1) {
+    const candidate = nearestPointOnSegment(point, polyline[index - 1], polyline[index]);
+    if (!nearest || candidate.distance < nearest.distance) {
+      nearest = candidate;
+    }
+  }
+
+  return nearest ? nearest.point : null;
+}
+
 // Pulls points back onto the reference corridor when they drift past corridorMeters, or unconditionally where forceSnap
 // is set (e.g. underground passages, which sit right below the surface corridor and pass the distance check as-is).
-// path and corridor represent the same start-to-end route, so - as with assignTurnCues below - a forward-only
-// segment cursor (instead of a full corridor rescan per point) keeps this O(path + corridor) rather than O(path * corridor).
+//
+// This does a full corridor rescan per point (O(path * corridor)) rather than tracking a forward-only segment
+// cursor. A forward-only cursor was tried and reverted: it assumes corridor progress is monotonic with path
+// progress, which breaks whenever the corridor (a real DRIVING route, e.g. via a detour around a one-way
+// street) briefly curves back near an earlier point - the cursor races ahead and never recovers, snapping the
+// rest of the route to the wrong end of the corridor. Confirmed in production: a ~5.4km route collapsed to
+// ~250m of usable path this way. Keep the exhaustive scan; it costs~100ms on the very largest routes tested.
 export function snapToRoadCorridor(
   path: LatLng[],
   corridor: LatLng[],
@@ -62,27 +86,13 @@ export function snapToRoadCorridor(
   if (corridor.length === 0) {
     return path;
   }
-  if (corridor.length === 1) {
-    return path.map((point, index) => {
-      const distance = distanceMeters(point, corridor[0]);
-      return forceSnap[index] || distance > corridorMeters ? corridor[0] : point;
-    });
-  }
-
-  let segmentIndex = 1;
 
   return path.map((point, index) => {
-    let best = nearestPointOnSegment(point, corridor[segmentIndex - 1], corridor[segmentIndex]);
-    while (segmentIndex + 1 < corridor.length) {
-      const next = nearestPointOnSegment(point, corridor[segmentIndex], corridor[segmentIndex + 1]);
-      if (next.distance >= best.distance) {
-        break;
-      }
-      segmentIndex += 1;
-      best = next;
+    const nearest = nearestPointOnPolyline(point, corridor);
+    if (!nearest) {
+      return point;
     }
-
-    return forceSnap[index] || best.distance > corridorMeters ? best.point : point;
+    return forceSnap[index] || distanceMeters(point, nearest) > corridorMeters ? nearest : point;
   });
 }
 
