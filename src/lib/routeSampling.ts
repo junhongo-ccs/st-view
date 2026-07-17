@@ -1,4 +1,4 @@
-import type { LatLng, NavigationCue, RoutePoint } from '../types';
+import type { LatLng, NavigationCue, RoutePoint, TurnCueAnchor } from '../types';
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -37,7 +37,66 @@ function interpolate(a: LatLng, b: LatLng, ratio: number): LatLng {
   };
 }
 
-export function sampleRoute(points: LatLng[], intervalMeters: number, maxFrames: number): RoutePoint[] {
+function nearestPointOnSegment(point: LatLng, a: LatLng, b: LatLng): { point: LatLng; distance: number } {
+  const lngScale = Math.cos(toRad(a.lat));
+  const abX = (b.lng - a.lng) * lngScale;
+  const abY = b.lat - a.lat;
+  const apX = (point.lng - a.lng) * lngScale;
+  const apY = point.lat - a.lat;
+  const abLengthSq = abX * abX + abY * abY;
+  const ratio = abLengthSq === 0 ? 0 : Math.max(0, Math.min(1, (apX * abX + apY * abY) / abLengthSq));
+  const projected = interpolate(a, b, ratio);
+  return { point: projected, distance: distanceMeters(point, projected) };
+}
+
+function nearestPointOnPolyline(point: LatLng, polyline: LatLng[]): LatLng | null {
+  if (polyline.length === 0) {
+    return null;
+  }
+  if (polyline.length === 1) {
+    return polyline[0];
+  }
+
+  let nearest: { point: LatLng; distance: number } | null = null;
+  for (let index = 1; index < polyline.length; index += 1) {
+    const candidate = nearestPointOnSegment(point, polyline[index - 1], polyline[index]);
+    if (!nearest || candidate.distance < nearest.distance) {
+      nearest = candidate;
+    }
+  }
+
+  return nearest ? nearest.point : null;
+}
+
+// Pulls points back onto the reference corridor when they drift past corridorMeters, or unconditionally where forceSnap
+// is set (e.g. underground passages, which sit right below the surface corridor and pass the distance check as-is).
+export function snapToRoadCorridor(
+  path: LatLng[],
+  corridor: LatLng[],
+  corridorMeters: number,
+  forceSnap: boolean[] = [],
+): LatLng[] {
+  if (corridor.length === 0) {
+    return path;
+  }
+
+  return path.map((point, index) => {
+    const nearest = nearestPointOnPolyline(point, corridor);
+    if (!nearest) {
+      return point;
+    }
+    return forceSnap[index] || distanceMeters(point, nearest) > corridorMeters ? nearest : point;
+  });
+}
+
+const TURN_CUE_RADIUS_METERS = 18;
+
+export function sampleRoute(
+  points: LatLng[],
+  intervalMeters: number,
+  maxFrames: number,
+  turnCueAnchors: TurnCueAnchor[] = [],
+): RoutePoint[] {
   if (points.length < 2) {
     return points.map((point) => ({ ...point, heading: 0, cue: { label: '到着' } }));
   }
@@ -66,47 +125,107 @@ export function sampleRoute(points: LatLng[], intervalMeters: number, maxFrames:
     sampled.push(last);
   }
 
-  const limited = limitFrames(sampled, maxFrames);
+  // Cue assignment runs on the full-resolution sampled points, before frame-limiting drops any of them -
+  // otherwise a turn whose nearest point gets thinned out would silently vanish from the final route.
+  const { cues: fullCues, anchorPointIndices } = assignTurnCues(sampled, turnCueAnchors);
+  const keepIndices = limitFrameIndices(sampled.length, maxFrames, anchorPointIndices);
+  const limited = keepIndices.map((index) => sampled[index]);
+  const limitedCues = keepIndices.map((index) => fullCues[index]);
 
   return limited.map((point, index) => {
     const next = limited[index + 1] ?? limited[index - 1] ?? point;
     return {
       ...point,
       heading: headingDegrees(point, next),
-      cue: buildCue(limited, index),
+      cue: index >= limited.length - 2 ? { label: '到着' } : limitedCues[index] ?? { label: '直進' },
     };
   });
 }
 
-function buildCue(points: LatLng[], index: number): NavigationCue {
-  if (index >= points.length - 2) {
-    return { label: '到着' };
+// Anchors are already in route order (getTurnCueAnchors walks legs/steps sequentially), so a forward-only
+// pointer over them - instead of a per-point global-nearest search - keeps a point from matching a turn it
+// hasn't reached yet, or re-matching one already passed just because the route geometry loops back near it.
+// Also tracks, per anchor, the single closest point index - limitFrameIndices uses this to guarantee turns
+// survive frame-limiting instead of being thinned out by plain uniform-index sampling.
+function assignTurnCues(
+  points: LatLng[],
+  turnCueAnchors: TurnCueAnchor[],
+): { cues: (NavigationCue | null)[]; anchorPointIndices: number[] } {
+  const cues: (NavigationCue | null)[] = new Array(points.length).fill(null);
+  const anchorPointIndices: number[] = [];
+  if (turnCueAnchors.length === 0) {
+    return { cues, anchorPointIndices };
   }
 
-  if (index < 1 || index >= points.length - 1) {
-    return { label: '直進' };
+  let anchorIndex = 0;
+  let bestIndex = -1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  const flushBest = () => {
+    if (bestIndex !== -1) {
+      anchorPointIndices.push(bestIndex);
+    }
+    bestIndex = -1;
+    bestDistance = Number.POSITIVE_INFINITY;
+  };
+
+  for (let index = 0; index < points.length; index += 1) {
+    while (
+      anchorIndex + 1 < turnCueAnchors.length &&
+      distanceMeters(points[index], turnCueAnchors[anchorIndex + 1]) < distanceMeters(points[index], turnCueAnchors[anchorIndex])
+    ) {
+      flushBest();
+      anchorIndex += 1;
+    }
+
+    const distance = distanceMeters(points[index], turnCueAnchors[anchorIndex]);
+    if (distance <= TURN_CUE_RADIUS_METERS) {
+      cues[index] = turnCueAnchors[anchorIndex].cue;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+      }
+    }
   }
+  flushBest();
 
-  const currentHeading = headingDegrees(points[index - 1], points[index]);
-  const nextHeading = headingDegrees(points[index], points[index + 1]);
-  const turn = normalizeTurn(nextHeading - currentHeading);
-
-  if (Math.abs(turn) < 35) {
-    return { label: '直進' };
-  }
-
-  return { label: turn > 0 ? '右へ' : '左へ' };
+  return { cues, anchorPointIndices };
 }
 
-function normalizeTurn(value: number) {
-  return ((((value + 180) % 360) + 360) % 360) - 180;
-}
-
-function limitFrames(points: LatLng[], maxFrames: number) {
-  if (!Number.isFinite(maxFrames) || maxFrames <= 0 || points.length <= maxFrames) {
-    return points;
+// Uniformly thins pointCount down to maxFrames by index, except indices in mustKeepIndices (plus the first
+// and last) are always kept; the remaining budget is distributed proportionally across the gaps between them.
+function limitFrameIndices(pointCount: number, maxFrames: number, mustKeepIndices: number[]): number[] {
+  if (!Number.isFinite(maxFrames) || maxFrames <= 0 || pointCount <= maxFrames) {
+    return Array.from({ length: pointCount }, (_, index) => index);
   }
 
-  const step = (points.length - 1) / (maxFrames - 1);
-  return Array.from({ length: maxFrames }, (_, index) => points[Math.round(index * step)]);
+  const required = new Set(mustKeepIndices);
+  required.add(0);
+  required.add(pointCount - 1);
+  const requiredSorted = Array.from(required).sort((a, b) => a - b);
+
+  if (requiredSorted.length >= maxFrames) {
+    const step = (requiredSorted.length - 1) / (maxFrames - 1);
+    return Array.from({ length: maxFrames }, (_, index) => requiredSorted[Math.round(index * step)]);
+  }
+
+  const resultIndices = new Set(requiredSorted);
+  const budgetForFill = maxFrames - requiredSorted.length;
+  const totalSpan = requiredSorted[requiredSorted.length - 1] - requiredSorted[0] || 1;
+
+  for (let i = 0; i < requiredSorted.length - 1; i += 1) {
+    const gapStart = requiredSorted[i];
+    const gapEnd = requiredSorted[i + 1];
+    const gapLength = gapEnd - gapStart;
+    if (gapLength <= 1) {
+      continue;
+    }
+
+    const fillCount = Math.min(gapLength - 1, Math.round((budgetForFill * gapLength) / totalSpan));
+    for (let f = 1; f <= fillCount; f += 1) {
+      resultIndices.add(gapStart + Math.round((f * gapLength) / (fillCount + 1)));
+    }
+  }
+
+  return Array.from(resultIndices).sort((a, b) => a - b);
 }

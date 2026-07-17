@@ -455,6 +455,7 @@ sample 用の `.env.example` は置かない。開発時は各自のローカル
 - Geometry Library
 - Directions API
 - Places API
+- Geocoding API
 - Street View Static API
 
 将来検討する API:

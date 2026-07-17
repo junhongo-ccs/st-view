@@ -18,7 +18,11 @@ export type RoutePoint = LatLng & {
 };
 
 export type NavigationCue = {
-  label: '直進' | '左へ' | '右へ' | '到着';
+  label: '直進' | '左へ' | '右へ' | 'やや左へ' | 'やや右へ' | '大きく左へ' | '大きく右へ' | 'Uターン' | '到着';
+};
+
+export type TurnCueAnchor = LatLng & {
+  cue: NavigationCue;
 };
 
 export type RouteEndpoint = {

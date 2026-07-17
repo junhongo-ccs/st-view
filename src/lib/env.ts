@@ -8,4 +8,5 @@ export const env = {
   streetViewRadiusMeters: Number(import.meta.env.VITE_STREET_VIEW_RADIUS_METERS ?? 10),
   sampleIntervalMeters: Number(import.meta.env.VITE_ROUTE_SAMPLE_INTERVAL_METERS ?? 5),
   maxPrefetchFrames: Number(import.meta.env.VITE_MAX_PREFETCH_FRAMES ?? 200),
+  roadCorridorMeters: Number(import.meta.env.VITE_ROAD_CORRIDOR_METERS ?? 20),
 };

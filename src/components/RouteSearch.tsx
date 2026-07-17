@@ -1,6 +1,7 @@
-import { Menu, Search, X } from 'lucide-react';
-import { useState } from 'react';
-import type { RouteEndpoint, RouteMeta } from '../types';
+import { ArrowLeftRight, Menu, Search, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { loadGoogleMaps } from '../lib/googleMaps';
+import type { LatLng, RouteEndpoint, RouteMeta } from '../types';
 import { PlaceAutocompleteInput } from './PlaceAutocompleteInput';
 
 type RouteSearchProps = {
@@ -102,7 +103,52 @@ function RouteForm({ disabled, initialStart, initialEnd, onClose, onSubmit }: Ro
   const [start, setStart] = useState<RouteEndpoint>(initialStart ? { label: initialStart } : emptyEndpoint);
   const [end, setEnd] = useState<RouteEndpoint>(initialEnd ? { label: initialEnd } : emptyEndpoint);
 
+  // A typed-but-not-yet-selected 出発地 has no location, so the destination's 10km radius filter
+  // (see PlaceAutocompleteInput) would otherwise sit disabled - geocode the raw text as a stand-in.
+  const [startFallbackLocation, setStartFallbackLocation] = useState<LatLng | undefined>();
+
+  useEffect(() => {
+    if (start.location) {
+      setStartFallbackLocation(undefined);
+      return;
+    }
+
+    const query = start.label.trim();
+    if (!query) {
+      setStartFallbackLocation(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      loadGoogleMaps()
+        .then((maps) => {
+          if (cancelled) {
+            return;
+          }
+          new maps.maps.Geocoder().geocode({ address: query }, (results, status) => {
+            if (cancelled || status !== maps.maps.GeocoderStatus.OK || !results?.[0]?.geometry?.location) {
+              return;
+            }
+            const location = results[0].geometry.location;
+            setStartFallbackLocation({ lat: location.lat(), lng: location.lng() });
+          });
+        })
+        .catch(() => {});
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [start.label, start.location]);
+
   const canSubmit = start.label.trim().length > 0 && end.label.trim().length > 0 && !disabled;
+
+  function swapEndpoints() {
+    setStart(end);
+    setEnd(start);
+  }
 
   return (
     <form
@@ -126,13 +172,22 @@ function RouteForm({ disabled, initialStart, initialEnd, onClose, onSubmit }: Ro
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+      <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr_auto] md:items-end">
         <PlaceAutocompleteInput label="出発地" placeholder="例: 自由が丘駅" value={start} onChange={setStart} />
+        <button
+          type="button"
+          aria-label="出発地と目的地を入れ替え"
+          onClick={swapEndpoints}
+          disabled={disabled}
+          className="mx-auto grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 md:mx-0 md:self-end"
+        >
+          <ArrowLeftRight className="h-4 w-4 rotate-90 md:rotate-0" strokeWidth={1.8} />
+        </button>
         <PlaceAutocompleteInput
           label="目的地"
           placeholder="例: STAMP COFFEE"
           value={end}
-          proximityOrigin={start.location}
+          proximityOrigin={start.location ?? startFallbackLocation}
           onChange={setEnd}
         />
         <button

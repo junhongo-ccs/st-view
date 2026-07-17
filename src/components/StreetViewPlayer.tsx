@@ -13,9 +13,16 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
   const [frontLayer, setFrontLayer] = useState(0);
   const [layerUrls, setLayerUrls] = useState<[string, string]>([imageUrls[0] ?? '', imageUrls[1] ?? imageUrls[0] ?? '']);
   const [placeLabel, setPlaceLabel] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement));
   const wheelAccumulatorRef = useRef(0);
   const geocodeCacheRef = useRef(new Map<string, string>());
   const geocodeRequestRef = useRef(0);
+
+  useEffect(() => {
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
 
   useEffect(() => {
     setFrameIndex(0);
@@ -104,7 +111,6 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
       return;
     }
 
-    const fallback = formatPointLabel(point);
     const key = `${point.lat.toFixed(5)},${point.lng.toFixed(5)}`;
     const cached = geocodeCacheRef.current.get(key);
     if (cached) {
@@ -112,7 +118,7 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
       return;
     }
 
-    setPlaceLabel(fallback);
+    setPlaceLabel('現在地を確認中...');
     const requestId = geocodeRequestRef.current + 1;
     geocodeRequestRef.current = requestId;
 
@@ -127,15 +133,15 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
 
             const label =
               status === maps.maps.GeocoderStatus.OK && results?.[0]?.formatted_address
-                ? results[0].formatted_address
-                : fallback;
+                ? formatAddressLabel(results[0].formatted_address)
+                : '現在地を確認できません';
             geocodeCacheRef.current.set(key, label);
             setPlaceLabel(label);
           });
         })
         .catch(() => {
-          geocodeCacheRef.current.set(key, fallback);
-          setPlaceLabel(fallback);
+          geocodeCacheRef.current.set(key, '現在地を確認できません');
+          setPlaceLabel('現在地を確認できません');
         });
     }, 250);
 
@@ -146,7 +152,8 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
     return null;
   }
 
-  const cue = routePoints[frameIndex]?.cue;
+  const rawCue = routePoints[frameIndex]?.cue;
+  const cue = rawCue?.label === '直進' ? null : rawCue;
   const currentPoint = routePoints[frameIndex];
   const currentStep = frameIndex + 1;
   const totalSteps = imageUrls.length;
@@ -168,7 +175,21 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
         ))}
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/35 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/45 to-transparent" />
-        {cue ? (
+        {playing && isFullscreen ? (
+          <div className="pointer-events-none absolute right-4 top-[max(16px,env(safe-area-inset-top))] z-10 md:right-8 md:top-6">
+            <span className="rounded-full border border-white/30 bg-black/35 px-3 py-1.5 text-[11px] font-medium text-white/85 shadow-float backdrop-blur-md md:text-xs">
+              Esc で全画面終了
+            </span>
+          </div>
+        ) : null}
+        {frameIndex === 0 ? (
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 px-6 md:block">
+            <div className="select-none text-center text-2xl font-semibold tracking-normal text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.8)]">
+              マウスホイールまたは矢印キーで移動します
+            </div>
+            <div className="mx-auto mt-2 h-0.5 w-10 rounded-full bg-white/85 shadow-[0_2px_10px_rgba(0,0,0,0.55)]" />
+          </div>
+        ) : cue ? (
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
             <div className="select-none text-center text-3xl font-semibold tracking-normal text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.8)] md:text-4xl">
               {cue.label}
@@ -182,7 +203,7 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
               <div className="text-white/90">{currentStep} / {totalSteps}</div>
               {currentPoint ? (
                 <div className="truncate text-[11px] text-white/65 md:text-xs">
-                  {placeLabel || formatPointLabel(currentPoint)}
+                  {placeLabel || '現在地を確認中...'}
                 </div>
               ) : null}
             </div>
@@ -197,6 +218,10 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
   );
 }
 
-function formatPointLabel(point: RoutePoint) {
-  return `現在地 ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}`;
+function formatAddressLabel(address: string) {
+  return address
+    .replace(/^日本、?/, '')
+    .replace(/^〒\d{3}-\d{4}\s*/, '')
+    .replace(/\s+/g, '')
+    .trim();
 }
