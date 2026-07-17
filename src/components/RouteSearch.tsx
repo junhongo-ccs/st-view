@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Menu, Search, X } from 'lucide-react';
+import { ArrowLeftRight, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { geocode } from '../lib/googleMaps';
 import type { LatLng, RouteEndpoint, RouteMeta } from '../types';
@@ -32,7 +32,7 @@ export function RouteSearch({ routeMeta, disabled, onSubmit }: RouteSearchProps)
         onClick={() => setMobileOpen(true)}
         className="fixed bottom-[max(24px,env(safe-area-inset-bottom))] right-5 z-40 grid h-12 w-12 place-items-center rounded-full border border-white/45 bg-black/25 text-white shadow-float backdrop-blur-md transition hover:bg-black/35 focus:outline-none focus:ring-2 focus:ring-brand md:hidden"
       >
-        <Menu className="h-5 w-5" strokeWidth={1.8} />
+        <Search className="h-5 w-5" strokeWidth={1.8} />
       </button>
 
       <div className="pointer-events-none fixed inset-x-0 top-[max(18px,env(safe-area-inset-top))] z-40 hidden justify-center px-4 md:flex">
