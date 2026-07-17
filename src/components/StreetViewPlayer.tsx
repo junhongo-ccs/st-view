@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { loadGoogleMaps } from '../lib/googleMaps';
+import { geocode } from '../lib/googleMaps';
 import type { RoutePoint } from '../types';
 
 type StreetViewPlayerProps = {
@@ -123,21 +123,15 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
     geocodeRequestRef.current = requestId;
 
     const timer = window.setTimeout(() => {
-      loadGoogleMaps()
-        .then((maps) => {
-          const geocoder = new maps.maps.Geocoder();
-          geocoder.geocode({ location: { lat: point.lat, lng: point.lng } }, (results, status) => {
-            if (geocodeRequestRef.current !== requestId) {
-              return;
-            }
+      geocode({ location: { lat: point.lat, lng: point.lng } })
+        .then((result) => {
+          if (geocodeRequestRef.current !== requestId) {
+            return;
+          }
 
-            const label =
-              status === maps.maps.GeocoderStatus.OK && results?.[0]?.formatted_address
-                ? formatAddressLabel(results[0].formatted_address)
-                : '現在地を確認できません';
-            geocodeCacheRef.current.set(key, label);
-            setPlaceLabel(label);
-          });
+          const label = result?.formatted_address ? formatAddressLabel(result.formatted_address) : '現在地を確認できません';
+          geocodeCacheRef.current.set(key, label);
+          setPlaceLabel(label);
         })
         .catch(() => {
           geocodeCacheRef.current.set(key, '現在地を確認できません');
@@ -182,17 +176,17 @@ export function StreetViewPlayer({ imageUrls, routePoints, playing }: StreetView
             </span>
           </div>
         ) : null}
-        {frameIndex === 0 ? (
-          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 px-6 md:block">
-            <div className="select-none text-center text-2xl font-semibold tracking-normal text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.8)]">
-              マウスホイールまたは矢印キーで移動します
-            </div>
-            <div className="mx-auto mt-2 h-0.5 w-10 rounded-full bg-white/85 shadow-[0_2px_10px_rgba(0,0,0,0.55)]" />
-          </div>
-        ) : cue ? (
+        {cue ? (
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
             <div className="select-none text-center text-3xl font-semibold tracking-normal text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.8)] md:text-4xl">
               {cue.label}
+            </div>
+            <div className="mx-auto mt-2 h-0.5 w-10 rounded-full bg-white/85 shadow-[0_2px_10px_rgba(0,0,0,0.55)]" />
+          </div>
+        ) : frameIndex === 0 ? (
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 px-6 md:block">
+            <div className="select-none text-center text-2xl font-semibold tracking-normal text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.8)]">
+              マウスホイールまたは矢印キーで移動します
             </div>
             <div className="mx-auto mt-2 h-0.5 w-10 rounded-full bg-white/85 shadow-[0_2px_10px_rgba(0,0,0,0.55)]" />
           </div>

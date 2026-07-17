@@ -3,8 +3,6 @@ type PlaceholderSceneProps = {
 };
 
 export function PlaceholderScene({ imageUrl }: PlaceholderSceneProps) {
-  const isStreetViewPreview = Boolean(imageUrl);
-
   return (
     <div className="fixed inset-0 h-dvh w-screen overflow-hidden bg-sky-50">
       <img
@@ -13,7 +11,7 @@ export function PlaceholderScene({ imageUrl }: PlaceholderSceneProps) {
         className="absolute inset-0 h-full w-full object-cover"
         draggable={false}
       />
-      {isStreetViewPreview ? (
+      {imageUrl ? (
         <>
           <div className="absolute inset-0 bg-slate-950/45" />
           <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-slate-950/60 to-transparent" />

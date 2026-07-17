@@ -50,6 +50,17 @@ export function loadGoogleMaps(): Promise<typeof google> {
   return loaderPromise;
 }
 
+// Wraps the callback-based Geocoder in a promise and resolves the OK-status check once, so callers
+// (forward geocoding in RouteSearch, reverse geocoding in StreetViewPlayer) don't each re-implement it.
+export async function geocode(request: google.maps.GeocoderRequest): Promise<google.maps.GeocoderResult | null> {
+  const maps = await loadGoogleMaps();
+  return new Promise((resolve) => {
+    new maps.maps.Geocoder().geocode(request, (results, status) => {
+      resolve(status === maps.maps.GeocoderStatus.OK && results?.[0] ? results[0] : null);
+    });
+  });
+}
+
 export function toLiteral(point: google.maps.LatLng | google.maps.LatLngLiteral) {
   const candidate = point as google.maps.LatLng;
   if (typeof candidate.lat === 'function') {

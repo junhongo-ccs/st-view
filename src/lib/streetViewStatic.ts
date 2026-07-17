@@ -19,11 +19,22 @@ export function buildStreetViewUrl(point: RoutePoint) {
 }
 
 export async function filterOutdoorStreetViewPoints(points: RoutePoint[]) {
-  const results = await Promise.allSettled(points.map(hasOutdoorStreetView));
-  return points.filter((_, index) => results[index].status === 'fulfilled' && results[index].value);
+  const results = await Promise.allSettled(points.map(fetchOutdoorPanoId));
+  const qualifying = points
+    .map((point, index) => {
+      const result = results[index];
+      return result.status === 'fulfilled' && result.value !== null ? { point, panoId: result.value } : null;
+    })
+    .filter((entry): entry is { point: RoutePoint; panoId: string | undefined } => entry !== null);
+
+  // Real Street View coverage is much sparser than the route's sampling interval, so consecutive sample
+  // points routinely snap to the exact same photo; drop the repeats so playback doesn't stall on one frame.
+  return qualifying
+    .filter((entry, index) => index === 0 || entry.panoId === undefined || entry.panoId !== qualifying[index - 1].panoId)
+    .map((entry) => entry.point);
 }
 
-async function hasOutdoorStreetView(point: RoutePoint) {
+async function fetchOutdoorPanoId(point: RoutePoint): Promise<string | undefined | null> {
   const params = new URLSearchParams({
     location: `${point.lat},${point.lng}`,
     radius: String(env.streetViewRadiusMeters),
@@ -33,21 +44,22 @@ async function hasOutdoorStreetView(point: RoutePoint) {
 
   const response = await fetch(`https://maps.googleapis.com/maps/api/streetview/metadata?${params.toString()}`);
   if (!response.ok) {
-    return false;
+    return null;
   }
 
   const metadata = (await response.json()) as {
     status?: string;
     copyright?: string;
     location?: { lat: number; lng: number };
+    pano_id?: string;
   };
   if (metadata.status !== 'OK' || !metadata.location) {
-    return false;
+    return null;
   }
 
   const isNearRoute = distanceMeters(point, metadata.location) <= env.streetViewRadiusMeters;
   const isGoogleRoadImagery = metadata.copyright?.toLowerCase().includes('google') ?? false;
-  return isNearRoute && isGoogleRoadImagery;
+  return isNearRoute && isGoogleRoadImagery ? metadata.pano_id : null;
 }
 
 export function prefetchImages(urls: string[], onProgress?: (loaded: number, total: number) => void) {

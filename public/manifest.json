@@ -7,5 +7,16 @@
   "background_color": "#020617",
   "theme_color": "#004386",
   "orientation": "portrait-primary",
-  "icons": []
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/ogp.png",
+      "sizes": "1200x630",
+      "type": "image/png"
+    }
+  ]
 }

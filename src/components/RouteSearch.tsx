@@ -1,6 +1,6 @@
 import { ArrowLeftRight, Menu, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { loadGoogleMaps } from '../lib/googleMaps';
+import { geocode } from '../lib/googleMaps';
 import type { LatLng, RouteEndpoint, RouteMeta } from '../types';
 import { PlaceAutocompleteInput } from './PlaceAutocompleteInput';
 
@@ -121,18 +121,13 @@ function RouteForm({ disabled, initialStart, initialEnd, onClose, onSubmit }: Ro
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      loadGoogleMaps()
-        .then((maps) => {
-          if (cancelled) {
+      geocode({ address: query })
+        .then((result) => {
+          if (cancelled || !result?.geometry?.location) {
             return;
           }
-          new maps.maps.Geocoder().geocode({ address: query }, (results, status) => {
-            if (cancelled || status !== maps.maps.GeocoderStatus.OK || !results?.[0]?.geometry?.location) {
-              return;
-            }
-            const location = results[0].geometry.location;
-            setStartFallbackLocation({ lat: location.lat(), lng: location.lng() });
-          });
+          const location = result.geometry.location;
+          setStartFallbackLocation({ lat: location.lat(), lng: location.lng() });
         })
         .catch(() => {});
     }, 400);
