@@ -174,7 +174,7 @@ function RouteForm({ disabled, initialStart, initialEnd, onClose, onSubmit }: Ro
           aria-label="出発地と目的地を入れ替え"
           onClick={swapEndpoints}
           disabled={disabled}
-          className="mx-auto grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 md:mx-0 md:self-end"
+          className="-my-3 mx-auto grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 md:my-0 md:mx-0 md:self-end"
         >
           <ArrowLeftRight className="h-4 w-4 rotate-90 md:rotate-0" strokeWidth={1.8} />
         </button>

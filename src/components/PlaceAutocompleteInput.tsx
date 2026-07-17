@@ -1,9 +1,19 @@
-import { KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
+import { KeyboardEvent, PointerEvent as ReactPointerEvent, useEffect, useId, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { loadGoogleMaps } from '../lib/googleMaps';
 import type { LatLng, RouteEndpoint } from '../types';
 
 const WALKABLE_DESTINATION_RADIUS_METERS = 10000;
+
+// Blocking the default pointerdown action keeps the input focused through a mouse click so the
+// dropdown doesn't vanish (via onBlur) before onClick fires. On iOS Safari, though, preventDefault
+// here on a touch pointer can suppress the synthetic click entirely, leaving the tap dead - so it's
+// only applied for non-touch pointers; touch taps fall back to their natural blur-then-click order.
+function preventDefaultUnlessTouch(event: ReactPointerEvent) {
+  if (event.pointerType !== 'touch') {
+    event.preventDefault();
+  }
+}
 
 type PlaceAutocompleteInputProps = {
   label: string;
@@ -88,6 +98,10 @@ export function PlaceAutocompleteInput({ label, placeholder, value, proximityOri
   const selectPrediction = (prediction: google.maps.places.AutocompletePrediction) => {
     setPredictions([]);
     setIsFocused(false);
+    // preventDefault on pointerdown (below) keeps the input focused through the tap so this click
+    // isn't lost to the dropdown disappearing first - but that also means iOS never closes its
+    // keyboard on its own here, so it must be blurred explicitly once a selection is made.
+    inputRef.current?.blur();
 
     const fallbackLabel = prediction.description;
     const placesService = placesServiceRef.current;
@@ -179,7 +193,7 @@ export function PlaceAutocompleteInput({ label, placeholder, value, proximityOri
           <button
             type="button"
             aria-label={`${label}を消去`}
-            onMouseDown={(event) => event.preventDefault()}
+            onPointerDown={preventDefaultUnlessTouch}
             onClick={clearValue}
             className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand/30"
           >
@@ -201,7 +215,7 @@ export function PlaceAutocompleteInput({ label, placeholder, value, proximityOri
               <button
                 key={prediction.place_id}
                 type="button"
-                onMouseDown={(event) => event.preventDefault()}
+                onPointerDown={preventDefaultUnlessTouch}
                 onClick={() => selectPrediction(prediction)}
                 onMouseEnter={() => setHighlightedIndex(index)}
                 className={`block w-full px-4 py-3 text-left transition ${
