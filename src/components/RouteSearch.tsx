@@ -75,7 +75,7 @@ export function RouteSearch({ routeMeta, disabled, onSubmit }: RouteSearchProps)
         onClick={() => setMobileOpen(false)}
       />
       <div
-        className={`fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-5 pb-[max(24px,env(safe-area-inset-bottom))] text-slate-900 shadow-float transition duration-300 md:hidden ${
+        className={`fixed inset-x-0 bottom-0 z-50 h-[92dvh] overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-5 pb-[max(24px,env(safe-area-inset-bottom))] text-slate-900 shadow-float transition duration-300 md:hidden ${
           mobileOpen ? 'translate-y-0' : 'translate-y-full'
         }`}
       >
